@@ -28,7 +28,7 @@ div[data-testid="stMetricValue"] div { color: #38bdf8 !important; font-weight: 8
 .val { font-size: 20px; font-weight: 900; }
 .legend-box { background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148,163,184,0.15); padding: 20px; border-radius: 14px; margin-top: 15px; }
 .leg-row { display: flex; align-items: center; margin-bottom: 15px; }
-.leg-dot { width: 18px; height: 18px; border-radius: 50%; margin-right: 15px; border: 2px solid white; box-shadow: 0 0 8px rgba(255,255,255,0.4); }
+.leg-dot { width: 18px; height: 18px; border-radius: 50%; margin-right: 15px; border: 2px solid white; box-shadow: 0 0 8px rgba(255,255,255,0.4); flex-shrink: 0; }
 .dot-green { background-color: #10b981; box-shadow: 0 0 10px #10b981; }
 .dot-orange { background-color: #f59e0b; box-shadow: 0 0 10px #f59e0b; }
 .dot-off { background-color: transparent; border: 2px dashed #64748b; box-shadow: none; }
@@ -37,13 +37,81 @@ div[data-testid="stMetricValue"] div { color: #38bdf8 !important; font-weight: 8
 </style>
 """, unsafe_allow_html=True)
 
+# --- BOČNÍ PANEL (HLAVNÍ NAVIGACE) ---
+st.sidebar.header("🧭 Navigace")
+rezim_aplikace = st.sidebar.radio("Vyberte režim:", ["🏡 3D Simulace", "📖 Uživatelská příručka"])
+
+if rezim_aplikace == "📖 Uživatelská příručka":
+    st.title("📖 Uživatelská příručka: 3D Digitální Dvojče FVE")
+    st.markdown("""
+    Tato aplikace slouží jako interaktivní dispečink a simulátor chytré domácnosti vybavené fotovoltaickou elektrárnou (FVE) a bateriovým úložištěm. Umožňuje detailně analyzovat toky energií, chování jednotlivých spotřebičů a interakci s distribuční sítí.
+
+    ---
+
+    ### 1. Levý ovládací panel (Nastavení a filtry)
+    Levý postranní panel je hlavním řídícím centrem aplikace. Zde nastavujete, jaký scénář a jaké detaily chcete analyzovat.
+
+    *   **⚙️ Nastavení Simulace (Vyberte období):** Umožňuje přepínat mezi šesti předpřipravenými scénáři z Excelu (Leden, Červenec, Říjen – vždy rozděleno na pracovní den a víkend). Po změně období se celá aplikace automaticky přepočítá.
+    *   **👁️ 3D Pohled:** Přepínač pro hlavní 3D mapu. 
+        *   *Interiér a spotřebiče:* Odkryje střechu a zobrazí rozložení místností, baterii a spotřebiče.
+        *   *Střecha a Jihovýchodní FVE:* Skryje interiér a zobrazí solární panely. Pokud panely vyrábí, zezelenají.
+    *   **🎛️ Zobrazení spotřebičů (Filtr):** Zde můžete zapínat a vypínat jednotlivé spotřebiče (např. světla, televizi, pračku). Filtr okamžitě skryje ikonu ve 3D modelu i v grafech.
+    *   **🔌 Spotřebiče (Cesta časem):** Speciální vyhledávač. Pokud vyberete spotřebič, aplikace najde všechny okamžiky, kdy byl zapnutý. Kliknutím na časové tlačítko se posuvník času rovnou přesune.
+
+    ---
+
+    ### 2. Hlavní souhrnné metriky a Měřítko (kW vs kWh)
+    Pětice číselných ukazatelů na samém vrchu obrazovky poskytuje rychlý denní souhrn za celých 24 hodin vybraného scénáře. Tyto hodnoty jsou uváděny v **objemu energie (kWh)**.
+    
+    *Moderní energetické dispečinky (a tedy i tato aplikace ve 3D modelu a grafech) však ukazují **okamžitý výkon (kW)**.*
+    Z toho důvodu aplikace provádí matematický přepočet: Hodnotu energie získanou z 15minutového úseku v Excelu násobí čtyřmi (`x 4`), čímž získá reálný okamžitý fyzikální výkon, jaký zrovna protékal kabely. Všechny tečky ve 3D modelu reprezentují aktuální zatížení.
+
+    ---
+
+    ### 3. Analytické grafy
+    Aplikace obsahuje tři hlavní interaktivní grafy. Můžete si v nich myší ohraničit a přiblížit (zazoomovat) jakýkoliv zajímavý výkyv. Dvojitým kliknutím do grafu se pohled opět oddálí.
+
+    **1. Základní toky (Zdroj vs Spotřeba)**
+    Ukazuje celkový příkon domu (červená křivka) v porovnání s výrobou solárních panelů (žlutá plocha). Přerušovaná modrá čára indikuje momenty nákupu elektřiny ze sítě.
+
+    **2. Energetická stopa spotřebičů**
+    Skládaný sloupcový graf. Rozpad červené křivky z prvního grafu na drobné. Tento graf dynamicky zoomuje osu Y. Pokud vypnete velké žrouty a necháte jen notebook a mobil, graf automaticky změní měřítko.
+
+    **3. Interakce s distribuční sítí**
+    Zrcadlový plošný graf. Červená plocha nahoře znamená nákup (dům síť zatěžuje). Zelená plocha do mínusu představuje přetoky (prodej přebytků).
+
+    ---
+
+    ### 4. Žebříček žroutů
+    Tabulka na samém konci aplikace. Sčítá celodenní spotřebu jednotlivých spotřebičů v **kWh** a řadí je od těch nejnáročnějších po ty nejúspornější. Tabulka bere v úvahu filtr z levého panelu – zobrazuje pouze spotřebiče, které jste nechali aktivní.
+
+    ---
+
+    ### 🎮 5. Jak ovládat 3D model (Nástrojový panel)
+    Když najedete myší do pravého horního rohu 3D modelu, objeví se skrytý nástrojový panel (tzv. Modebar). Ten obsahuje velmi užitečné nástroje pro ovládání pohledu na váš digitální dům.
+
+    *   📷 **Download plot as a png (Vyfotit scénu):** První ikonka fotoaparátu okamžitě uloží aktuální 3D pohled na váš dům jako kvalitní obrázek do vašeho počítače.
+    *   🔎 **Zoom (Lupa):** Zapne režim přibližování. Když stisknete levé tlačítko myši a táhnete nahoru, přibližujete se k domu (můžete "vjet" až do místností). Táhnutím dolů se od domu oddalujete. Rychleji to však jde pouhým točením kolečka na myši.
+    *   ✥ **Pan (Posun / Ruka):** Zapne režim rovnoběžného posunu. Umožňuje vám "chytit" celou 3D scénu a přesunout ji doleva, doprava, nahoru nebo dolů, aniž byste měnili natočení (sklon) kamery. 
+    *   🔄 **Orbital rotation (Orbitální rotace - Výchozí):** Toto je základní a nejdůležitější režim! Umožňuje vám kliknout kamkoliv do obrázku a plynule dům otáčet, naklánět a prohlížet si ho ze všech stran. 
+    *   ⏏️ **Turntable rotation (Otočný stůl):** Zamkne jednu osu rotace. Na rozdíl od orbitální rotace, kde můžete model převrátit "vzhůru nohama", vás tento režim nutí točit modelem pouze dokola, jako by stál na stole. Zabraňuje tomu, abyste se ve 3D prostoru dezorientovali.
+    *   🏠 **Reset camera to default (Návrat domů):** Nejdůležitější pojistka. Pokud dům omylem posunete mimo obrazovku, přiblížíte tak moc, že nevíte kde jste, nebo jej nechtěně překlopíte vzhůru nohama, **klikněte na tuto ikonu domečku**. Okamžitě vám celou scénu a kameru zresetuje do původního krásného výchozího stavu.
+
+    **Další klávesové a myší zkratky:**
+    *   **Kolečko myši:** Slouží pro plynulé a nekonečné přibližování a oddalování.
+    *   **Kliknutí pravým tlačítkem + tažení:** Rychle přepne z rotace do režimu "Pan" (Posun prostoru) – skvělé pro vystředění domu.
+    """)
+    st.stop() 
+
+# -----------------------------------------------------------------------------------------
+# --- ZDE ZAČÍNÁ KLASICKÁ 3D SIMULACE ---
+# -----------------------------------------------------------------------------------------
+
 st.title("🏡 3D Digitální Dvojče: FVE Domácnost")
 
-# --- INICIALIZACE ČASU PRO AUTOMATICKÉ PŘETÁČENÍ ---
 if 'slider_cas' not in st.session_state:
     st.session_state.slider_cas = "12:00"
 
-# --- NAČÍTÁNÍ DAT ---
 BASE_DIR = Path(__file__).parent
 excel_candidates = [
     BASE_DIR / "projekt-FVE-domacnost4_3.xlsx", 
@@ -75,7 +143,7 @@ def load_data(file_path, sheet_b, sheet_d):
         if col in df_b.columns: df_b[col] = pd.to_numeric(df_b[col], errors='coerce').fillna(0)
     return df_b, df_d, soc_col_name
 
-# --- BOČNÍ PANEL (NASTAVENÍ) ---
+st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Nastavení Simulace")
 obdobi = st.sidebar.selectbox("Vyberte období:", ["Leden (pracovní den)", "Leden (víkend)", "Červenec (pracovní den)", "Červenec (víkend)", "Říjen (pracovní den)", "Říjen (víkend)"])
 
@@ -91,7 +159,6 @@ df_bal, df_app, soc_col_name = load_data(EXCEL_PATH, sheet_bal, sheet_data)
 st.sidebar.markdown("---")
 vrstva_zobrazeni = st.sidebar.radio("👁️ 3D Pohled:", ("Interiér a spotřebiče", "Střecha a Jihovýchodní FVE"))
 
-# --- PŘÍPRAVA SEZNAMU SPOTŘEBIČŮ PRO FILTR ---
 ignore_cols = ['Datum', 'Čas', 'Spotřeba domácnosti', 'Čas_zobrazeni']
 appliance_cols = [c for c in df_app.columns if c not in ignore_cols and not c.startswith('Unnamed')]
 df_app_unique = df_app.loc[:, ~df_app.columns.duplicated()]
@@ -110,7 +177,6 @@ vybrane_spotrebice = st.sidebar.multiselect(
     default=active_appliances
 )
 
-# --- VYHLEDÁVAČ A SKOK V ČASE NA KONKRÉTNÍ SPOTŘEBIČ ---
 st.sidebar.markdown("---")
 st.sidebar.header("🔌 Spotřebiče")
 hledany_spotrebic = st.sidebar.selectbox("Vyhledat a skočit na čas zapnutí:", ["(Nevybráno)"] + active_appliances)
@@ -121,11 +187,8 @@ if hledany_spotrebic != "(Nevybráno)":
     
     if not aktivni_casy.empty:
         st.sidebar.markdown(f"*Nalezeno {len(aktivni_casy)} úseků, kdy je {hledany_spotrebic} zapnutý:*")
-        
         def skocit_v_case(novy_cas):
             st.session_state.slider_cas = novy_cas
-            
-        # Projdeme všechny aktivní časy a pro každý vytvoříme tlačítko
         for idx, val in aktivni_casy.items():
             cas_skoku = df_bal.loc[idx, 'Čas_zobrazeni']
             st.sidebar.button(
@@ -146,8 +209,7 @@ c4.metric("⚡ Přetoky do sítě", f"{df_bal['Přetok do DS'].sum():.1f} kWh")
 c5.metric("🔋 Baterie (na konci)", f"{df_bal['Stav baterie'].iloc[-1]:.1f} kWh")
 st.markdown("---")
 
-st.markdown("### ⏱️ Stroj Času (Interaktivní 3D Dvojče)")
-# PROPOJENÍ POSUVNÍKU SE SESSION_STATE
+st.markdown("### ⏱️ Stroj Času")
 zvoleny_cas = st.select_slider("Posunem sledujte změny v domě v čase:", options=df_bal['Čas_zobrazeni'].tolist(), key="slider_cas")
 idx = df_bal[df_bal['Čas_zobrazeni'] == zvoleny_cas].index[0]
 radek_bal = df_bal.iloc[idx]
@@ -164,7 +226,7 @@ try:
 except ValueError:
     hodina = 12
 
-col_leg, col_mapa, col_budiky = st.columns([0.7, 2.3, 1.0])
+col_leg, col_mapa, col_budiky = st.columns([0.75, 2.3, 0.95])
 
 with col_leg:
     st.markdown("<h4 style='margin-bottom: 0px;'>Barevná legenda</h4>", unsafe_allow_html=True)
@@ -251,7 +313,6 @@ with col_mapa:
         for app_name, info in appliances_map.items():
             source = info.get('source_col', app_name)
             
-            # Pokud uživatel vypnul spotřebič v bočním panelu, nezobrazí se v 3D
             if source not in vybrane_spotrebice:
                 continue
                 
@@ -281,7 +342,7 @@ with col_mapa:
             hoverinfo="text", hovertext=hover_app, showlegend=False
         ))
         
-        camera_eye = dict(x=-0.8, y=-1.8, z=1.5)
+        camera_eye = dict(x=-0.55, y=-1.35, z=1.1)
         
     else:
         fig_3d.add_trace(go.Mesh3d(x=[-0.5, 20.5, 20.5, -0.5], y=[-0.5, -0.5, 7.5, 7.5], z=[Z_WALL, Z_WALL, Z_WALL+2.0, Z_WALL+2.0], color='#334155', opacity=0.9, hoverinfo='skip', showscale=False))
@@ -314,7 +375,7 @@ with col_mapa:
         panel_text = f"FVE VYRÁBÍ<br>☀️ {aktualni_fve_kw:.2f} kW" if je_aktivni else ""
         fig_3d.add_trace(go.Scatter3d(x=[10], y=[3.5], z=[Z_WALL + 3.0], mode='text', text=[panel_text], textfont=dict(color="#10b981", size=18, family="Arial Black"), hoverinfo="skip", showlegend=False))
         
-        camera_eye = dict(x=0.2, y=-1.8, z=1.2)
+        camera_eye = dict(x=0.1, y=-1.35, z=0.9)
 
     bublina_text = ""
     bublina_barva = "#ffffff"
@@ -343,19 +404,23 @@ with col_mapa:
         textfont=dict(color=bublina_barva, size=16, family="Arial Black"), hoverinfo='skip', showlegend=False
     ))
 
+    # --- ZCELA KLÍČOVÁ A KONEČNÁ OPRAVA (STABILNÍ KAMERA) ---
+    # Tvar domu je 100% zachován díky původním hodnotám "range".
+    # Chyba v nestabilitě kamery spočívala v tom, že předtím se "camera" posílala pouze podmíněně.
+    # Nyní se definuje VŽDY (což vyhovuje enginu) a zámek "uirevision" zajišťuje, že se nebudou rušit vaše zásahy myší.
     fig_3d.update_layout(
         scene=dict(
             xaxis=dict(showgrid=False, zeroline=False, visible=False, range=[-2, 22]), 
             yaxis=dict(showgrid=False, zeroline=False, visible=False, range=[-2, 17]), 
-            zaxis=dict(showgrid=False, zeroline=False, visible=False, range=[0, 9]), 
-            camera=dict(up=dict(x=0,y=0,z=1), center=dict(x=0,y=0,z=-0.2), eye=camera_eye)
+            zaxis=dict(showgrid=False, zeroline=False, visible=False, range=[0, 9]),
+            camera=dict(up=dict(x=0,y=0,z=1), center=dict(x=0,y=0,z=-0.2), eye=camera_eye),
+            uirevision=vrstva_zobrazeni
         ),
-        margin=dict(l=0, r=0, t=0, b=0), 
+        margin=dict(l=0, r=0, t=0, b=80), 
         paper_bgcolor="rgba(0,0,0,0)", 
-        height=500,
-        uirevision=True  
+        height=700
     )
-    st.plotly_chart(fig_3d, use_container_width=True)
+    st.plotly_chart(fig_3d, use_container_width=True, key="mapa_3d")
 
 with col_budiky:
     st.markdown(f"""
@@ -372,7 +437,7 @@ with col_budiky:
         title={'text': f"🔋 Baterie ({radek_bal['Stav baterie']:.1f} kWh)", 'font': {'size': 18, 'color':'#f8fafc'}},
         gauge={'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#475569", 'tickfont': {'color': "#94a3b8"}}, 'bar': {'color': barva}, 'bgcolor': "rgba(15,23,42,0.8)", 'borderwidth': 0, 'steps': [{'range': [0, 5], 'color': "#7f1d1d"}, {'range': [5, 10], 'color': "#78350f"}, {'range': [10, 100], 'color': "#064e3b"}]}
     ))
-    fig_bat.update_layout(height=260, margin=dict(l=20, r=20, t=50, b=10), paper_bgcolor="rgba(0,0,0,0)")
+    fig_bat.update_layout(height=280, margin=dict(l=40, r=40, t=50, b=10), paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig_bat, use_container_width=True)
 
 
@@ -403,15 +468,12 @@ st.plotly_chart(fig_toky, use_container_width=True)
 fig_spotrebice = go.Figure()
 distinct_colors = ['#38bdf8', '#a3e635', '#f87171', '#c084fc', '#fbbf24', '#2dd4bf', '#fb7185', '#818cf8', '#fcd34d', '#34d399', '#f472b6', '#60a5fa']
 
-# Kreslíme pouze ty, které uživatel nevypnul
 for idx, app_name in enumerate(vybrane_spotrebice):
     vykon_kw = pd.to_numeric(df_app_unique[app_name], errors='coerce').fillna(0) * 4
     fig_spotrebice.add_trace(go.Bar(x=df_bal['Čas_zobrazeni'], y=vykon_kw, name=app_name, marker_color=distinct_colors[idx % len(distinct_colors)], marker_line_color='rgba(255,255,255,0.3)', marker_line_width=1, hovertemplate='<b>%{y:.3f} kW</b><extra></extra>'))
 
-# DYNAMICKÝ ZOOM OSY Y: 
 if vybrane_spotrebice:
     df_vybrane = df_app_unique[vybrane_spotrebice].apply(pd.to_numeric, errors='coerce').fillna(0)
-    # Najde největší vrchol vybraných spotřebičů
     max_y_spotrebice = max(df_vybrane.sum(axis=1).max() * 4 * 1.1 + 0.05, 0.2)
 else:
     max_y_spotrebice = 1.0
@@ -429,7 +491,7 @@ fig_spotrebice.update_layout(
 st.plotly_chart(fig_spotrebice, use_container_width=True)
 
 
-# --- TŘETÍ GRAF: INTERAKCE SE SÍTÍ (PŘETOKY VS ODBĚR) ---
+# --- TŘETÍ GRAF: INTERAKCE SE SÍTÍ ---
 st.markdown("---")
 st.markdown("### ⚡ Interakce s distribuční sítí (Nákup vs Prodej)")
 
