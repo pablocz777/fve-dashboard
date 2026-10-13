@@ -39,6 +39,10 @@ div[data-testid="stMetricValue"] div { color: #38bdf8 !important; font-weight: 8
 
 st.title("🏡 3D Digitální Dvojče: FVE Domácnost")
 
+# --- INICIALIZACE ČASU PRO AUTOMATICKÉ PŘETÁČENÍ ---
+if 'slider_cas' not in st.session_state:
+    st.session_state.slider_cas = "12:00"
+
 # --- NAČÍTÁNÍ DAT ---
 BASE_DIR = Path(__file__).parent
 excel_candidates = [
@@ -51,19 +55,6 @@ if EXCEL_PATH is None:
     st.error("Excelový soubor nebyl nalezen. Ujistěte se, že je uložen ve stejné složce jako app.py.")
     st.stop()
 
-st.sidebar.header("⚙️ Nastavení Simulace")
-obdobi = st.sidebar.selectbox("Vyberte období:", ["Leden (pracovní den)", "Leden (víkend)", "Červenec (pracovní den)", "Červenec (víkend)", "Říjen (pracovní den)", "Říjen (víkend)"])
-
-st.sidebar.markdown("---")
-vrstva_zobrazeni = st.sidebar.radio("👁️ 3D Pohled:", ("Interiér a spotřebiče", "Střecha a Jihovýchodní FVE"))
-
-sheet_map = {
-    "Leden (pracovní den)": ("Leden", "Leden data"), "Leden (víkend)": ("Leden vík", "Leden vík data"),
-    "Červenec (pracovní den)": ("Červenec", "Červenec data"), "Červenec (víkend)": ("Červenec vík", "Červenec vík data"),
-    "Říjen (pracovní den)": ("Říjen", "Říjen data"), "Říjen (víkend)": ("Říjen vík", "Říjen vík data"),
-}
-sheet_bal, sheet_data = sheet_map[obdobi]
-
 @st.cache_data
 def load_data(file_path, sheet_b, sheet_d):
     df_b = pd.read_excel(file_path, sheet_name=sheet_b, skiprows=[1]).iloc[:96].copy()
@@ -71,7 +62,6 @@ def load_data(file_path, sheet_b, sheet_d):
     df_b.columns = [str(c).strip() for c in df_b.columns]
     df_d.columns = [str(c).strip() for c in df_d.columns]
     
-    # TVRDÁ A RYCHLÁ OPRAVA: Přejmenování plynového kotle na Elektrický, pokud v datech stále je
     if 'Plynový kotel + ohřev vody + topení' in df_d.columns:
         df_d = df_d.rename(columns={'Plynový kotel + ohřev vody + topení': 'Elektrický kotel + ohřev vody + topení'})
         
@@ -85,8 +75,69 @@ def load_data(file_path, sheet_b, sheet_d):
         if col in df_b.columns: df_b[col] = pd.to_numeric(df_b[col], errors='coerce').fillna(0)
     return df_b, df_d, soc_col_name
 
+# --- BOČNÍ PANEL (NASTAVENÍ) ---
+st.sidebar.header("⚙️ Nastavení Simulace")
+obdobi = st.sidebar.selectbox("Vyberte období:", ["Leden (pracovní den)", "Leden (víkend)", "Červenec (pracovní den)", "Červenec (víkend)", "Říjen (pracovní den)", "Říjen (víkend)"])
+
+sheet_map = {
+    "Leden (pracovní den)": ("Leden", "Leden data"), "Leden (víkend)": ("Leden vík", "Leden vík data"),
+    "Červenec (pracovní den)": ("Červenec", "Červenec data"), "Červenec (víkend)": ("Červenec vík", "Červenec vík data"),
+    "Říjen (pracovní den)": ("Říjen", "Říjen data"), "Říjen (víkend)": ("Říjen vík", "Říjen vík data"),
+}
+sheet_bal, sheet_data = sheet_map[obdobi]
+
 df_bal, df_app, soc_col_name = load_data(EXCEL_PATH, sheet_bal, sheet_data)
 
+st.sidebar.markdown("---")
+vrstva_zobrazeni = st.sidebar.radio("👁️ 3D Pohled:", ("Interiér a spotřebiče", "Střecha a Jihovýchodní FVE"))
+
+# --- PŘÍPRAVA SEZNAMU SPOTŘEBIČŮ PRO FILTR ---
+ignore_cols = ['Datum', 'Čas', 'Spotřeba domácnosti', 'Čas_zobrazeni']
+appliance_cols = [c for c in df_app.columns if c not in ignore_cols and not c.startswith('Unnamed')]
+df_app_unique = df_app.loc[:, ~df_app.columns.duplicated()]
+
+active_appliances = []
+for c in appliance_cols:
+    if c in df_app_unique.columns:
+        if pd.to_numeric(df_app_unique[c], errors='coerce').fillna(0).sum() > 0: 
+            active_appliances.append(c)
+
+st.sidebar.markdown("---")
+st.sidebar.header("🎛️ Zobrazení spotřebičů")
+vybrane_spotrebice = st.sidebar.multiselect(
+    "Vyberte, co chcete vidět v modelu a grafech:", 
+    options=active_appliances, 
+    default=active_appliances
+)
+
+# --- VYHLEDÁVAČ A SKOK V ČASE NA KONKRÉTNÍ SPOTŘEBIČ ---
+st.sidebar.markdown("---")
+st.sidebar.header("🔌 Spotřebiče")
+hledany_spotrebic = st.sidebar.selectbox("Vyhledat a skočit na čas zapnutí:", ["(Nevybráno)"] + active_appliances)
+
+if hledany_spotrebic != "(Nevybráno)":
+    s_data = pd.to_numeric(df_app_unique[hledany_spotrebic], errors='coerce').fillna(0)
+    aktivni_casy = s_data[s_data > 0]
+    
+    if not aktivni_casy.empty:
+        st.sidebar.markdown(f"*Nalezeno {len(aktivni_casy)} úseků, kdy je {hledany_spotrebic} zapnutý:*")
+        
+        def skocit_v_case(novy_cas):
+            st.session_state.slider_cas = novy_cas
+            
+        # Projdeme všechny aktivní časy a pro každý vytvoříme tlačítko
+        for idx, val in aktivni_casy.items():
+            cas_skoku = df_bal.loc[idx, 'Čas_zobrazeni']
+            st.sidebar.button(
+                f"⏱️ {cas_skoku} ({val*4:.3f} kW)", 
+                key=f"btn_skok_{hledany_spotrebic}_{cas_skoku}",
+                on_click=skocit_v_case, 
+                args=(cas_skoku,)
+            )
+    else:
+        st.sidebar.info("Tento spotřebič se ve vybraný den nezapíná.")
+
+# --- HLAVNÍ METRIKY ---
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("☀ Výroba FVE", f"{df_bal['Výroba FVE'].sum():.1f} kWh")
 c2.metric("🏠 Spotřeba domu", f"{df_bal['Spotřeba'].sum():.1f} kWh")
@@ -96,7 +147,8 @@ c5.metric("🔋 Baterie (na konci)", f"{df_bal['Stav baterie'].iloc[-1]:.1f} kWh
 st.markdown("---")
 
 st.markdown("### ⏱️ Stroj Času (Interaktivní 3D Dvojče)")
-zvoleny_cas = st.select_slider("Posunem sledujte změny v domě v čase:", options=df_bal['Čas_zobrazeni'].tolist(), value="12:00")
+# PROPOJENÍ POSUVNÍKU SE SESSION_STATE
+zvoleny_cas = st.select_slider("Posunem sledujte změny v domě v čase:", options=df_bal['Čas_zobrazeni'].tolist(), key="slider_cas")
 idx = df_bal[df_bal['Čas_zobrazeni'] == zvoleny_cas].index[0]
 radek_bal = df_bal.iloc[idx]
 radek_app = df_app.iloc[idx]
@@ -135,10 +187,8 @@ with col_leg:
 with col_mapa:
     fig_3d = go.Figure()
     
-    # 1. TRÁVNÍK
     fig_3d.add_trace(go.Mesh3d(x=[-5, 25, 25, -5], y=[-5, -5, 20, 20], z=[-0.1, -0.1, -0.1, -0.1], color='#064e3b', opacity=0.4, hoverinfo='skip', showscale=False))
     
-    # 2. KOMPAS (Viditelný pouze na střeše)
     kompas_opac = 1.0 if vrstva_zobrazeni != "Interiér a spotřebiče" else 0.0
     fig_3d.add_trace(go.Scatter3d(x=[-2, 22], y=[7.5, 7.5], z=[-0.05, -0.05], mode='lines', line=dict(color=f'rgba(255,255,255,{kompas_opac})', width=2), hoverinfo='skip'))
     fig_3d.add_trace(go.Scatter3d(x=[10, 10], y=[-2, 17], z=[-0.05, -0.05], mode='lines', line=dict(color=f'rgba(255,255,255,{kompas_opac})', width=2), hoverinfo='skip'))
@@ -162,7 +212,6 @@ with col_mapa:
             fig_3d.add_trace(go.Scatter3d(x=xl, y=yl, z=zl, mode='lines', line=dict(color='#94a3b8', width=2), showlegend=False, hoverinfo='skip'))
             fig_3d.add_trace(go.Scatter3d(x=[(r["x0"]+r["x1"])/2], y=[(r["y0"]+r["y1"])/2], z=[0.1], mode='text', text=[r["name"]], textfont=dict(color="#94a3b8", size=10), showlegend=False, hoverinfo='skip'))
 
-        # --- BATERIE ---
         b_x, b_y = 9.0, 3.5
         b_w, b_h = 0.8, 0.8
         max_bat_height = 1.4
@@ -176,15 +225,9 @@ with col_mapa:
         
         fill_zs = [0, 0, 0, 0, current_bat_height, current_bat_height, current_bat_height, current_bat_height]
         fig_3d.add_trace(go.Mesh3d(x=b_xs, y=b_ys, z=fill_zs, color=bat_color, opacity=0.9, alphahull=0, hovertemplate=f"<b>Fyzická Baterie</b><br>Nabití: {soc:.1f}%<extra></extra>"))
-        fig_3d.add_trace(go.Scatter3d(
-            x=[b_x, b_x+b_w, b_x+b_w, b_x, b_x, b_x, b_x+b_w, b_x+b_w, b_x+b_w, b_x+b_w, b_x, b_x],
-            y=[b_y, b_y, b_y+b_h, b_y+b_h, b_y, b_y, b_y, b_y, b_y+b_h, b_y+b_h, b_y+b_h, b_y+b_h],
-            z=[0, 0, 0, 0, 0, max_bat_height, max_bat_height, 0, 0, max_bat_height, max_bat_height, 0],
-            mode='lines', line=dict(color='#ffffff', width=2), hoverinfo='skip'
-        ))
+        fig_3d.add_trace(go.Scatter3d(x=[b_x, b_x+b_w, b_x+b_w, b_x, b_x, b_x, b_x+b_w, b_x+b_w, b_x+b_w, b_x+b_w, b_x, b_x], y=[b_y, b_y, b_y+b_h, b_y+b_h, b_y, b_y, b_y, b_y, b_y+b_h, b_y+b_h, b_y+b_h, b_y+b_h], z=[0, 0, 0, 0, 0, max_bat_height, max_bat_height, 0, 0, max_bat_height, max_bat_height, 0], mode='lines', line=dict(color='#ffffff', width=2), hoverinfo='skip'))
         fig_3d.add_trace(go.Scatter3d(x=[b_x + b_w/2], y=[b_y + b_h/2], z=[max_bat_height + 0.3], mode='text', text=[f"<b>{soc:.0f}%</b>"], textfont=dict(color=bat_color, size=15, family="Arial Black"), hoverinfo='skip'))
 
-        # --- SPOTŘEBIČE ---
         kotel_col = 'Elektrický kotel + ohřev vody + topení'
         appliances_map = {
             'Televize': {'label': 'TV', 'pos': (2.5, 12.5)}, 'Elektrické žaluzie': {'label': 'Žaluzie', 'pos': (5.5, 12.5)},
@@ -207,6 +250,11 @@ with col_mapa:
 
         for app_name, info in appliances_map.items():
             source = info.get('source_col', app_name)
+            
+            # Pokud uživatel vypnul spotřebič v bočním panelu, nezobrazí se v 3D
+            if source not in vybrane_spotrebice:
+                continue
+                
             display_name = info.get('display_name', app_name)
             val = 0
             if source in df_app.columns:
@@ -236,7 +284,6 @@ with col_mapa:
         camera_eye = dict(x=-0.8, y=-1.8, z=1.5)
         
     else:
-        # --- ZOBRAZENÍ 2: STŘECHA A ZAROVNANÉ PANELY ---
         fig_3d.add_trace(go.Mesh3d(x=[-0.5, 20.5, 20.5, -0.5], y=[-0.5, -0.5, 7.5, 7.5], z=[Z_WALL, Z_WALL, Z_WALL+2.0, Z_WALL+2.0], color='#334155', opacity=0.9, hoverinfo='skip', showscale=False))
         fig_3d.add_trace(go.Mesh3d(x=[-0.5, 20.5, 20.5, -0.5], y=[7.5, 7.5, 15.5, 15.5], z=[Z_WALL+2.0, Z_WALL+2.0, Z_WALL, Z_WALL], color='#1e293b', opacity=0.9, hoverinfo='skip', showscale=False))
         fig_3d.add_trace(go.Scatter3d(x=[-0.5, 20.5, 20.5, -0.5, -0.5, -0.5, 20.5, 20.5, -0.5], y=[-0.5, -0.5, 15.5, 15.5, -0.5, 7.5, 7.5, 15.5, 7.5], z=[Z_WALL, Z_WALL, Z_WALL, Z_WALL, Z_WALL, Z_WALL+2.0, Z_WALL+2.0, Z_WALL, Z_WALL+2.0], mode='lines', line=dict(color='#0ea5e9', width=4), showlegend=False, hoverinfo='skip'))
@@ -269,7 +316,6 @@ with col_mapa:
         
         camera_eye = dict(x=0.2, y=-1.8, z=1.2)
 
-    # --- INTELIGENTNÍ BUBLINA ---
     bublina_text = ""
     bublina_barva = "#ffffff"
     
@@ -297,7 +343,6 @@ with col_mapa:
         textfont=dict(color=bublina_barva, size=16, family="Arial Black"), hoverinfo='skip', showlegend=False
     ))
 
-    # --- NÁVRAT K PŮVODNÍM LIMITŮM, UZAMČENÍ KAMERY BEZ ZDEFORMOVÁNÍ ---
     fig_3d.update_layout(
         scene=dict(
             xaxis=dict(showgrid=False, zeroline=False, visible=False, range=[-2, 22]), 
@@ -308,7 +353,7 @@ with col_mapa:
         margin=dict(l=0, r=0, t=0, b=0), 
         paper_bgcolor="rgba(0,0,0,0)", 
         height=500,
-        uirevision=vrstva_zobrazeni  
+        uirevision=True  
     )
     st.plotly_chart(fig_3d, use_container_width=True)
 
@@ -334,19 +379,11 @@ with col_budiky:
 # --- PRVNÍ GRAF: ZÁKLADNÍ TOKY ---
 st.markdown("---")
 st.markdown("### 📈 Denní průběh energií a spotřeby v kW")
-ignore_cols = ['Datum', 'Čas', 'Spotřeba domácnosti', 'Čas_zobrazeni']
-appliance_cols = [c for c in df_app.columns if c not in ignore_cols]
-df_app_unique = df_app.loc[:, ~df_app.columns.duplicated()]
-
-active_appliances = []
-for c in appliance_cols:
-    if c in df_app_unique.columns:
-        if pd.to_numeric(df_app_unique[c], errors='coerce').fillna(0).sum() > 0: active_appliances.append(c)
 
 fig_toky = go.Figure()
-fig_toky.add_trace(go.Scatter(x=df_bal['Čas_zobrazeni'], y=df_bal['Výroba FVE']*4, mode='lines', name='Výroba FVE', line=dict(color='#fbbf24', width=3), fill='tozeroy', hovertemplate='%{y:.2f} kW<extra></extra>'))
-fig_toky.add_trace(go.Scatter(x=df_bal['Čas_zobrazeni'], y=df_bal['Spotřeba']*4, mode='lines', name='Příkon domu', line=dict(color='#ef4444', width=3), hovertemplate='%{y:.2f} kW<extra></extra>'))
-fig_toky.add_trace(go.Scatter(x=df_bal['Čas_zobrazeni'], y=df_bal['Odběr z DS']*4, mode='lines', name='Odběr ze sítě', line=dict(color='#38bdf8', width=2, dash='dash'), hovertemplate='%{y:.2f} kW<extra></extra>'))
+fig_toky.add_trace(go.Scatter(x=df_bal['Čas_zobrazeni'], y=df_bal['Výroba FVE']*4, mode='lines', name='Výroba FVE', line=dict(color='#fbbf24', width=3), fill='tozeroy', hovertemplate='%{y:.3f} kW<extra></extra>'))
+fig_toky.add_trace(go.Scatter(x=df_bal['Čas_zobrazeni'], y=df_bal['Spotřeba']*4, mode='lines', name='Příkon domu', line=dict(color='#ef4444', width=3), hovertemplate='%{y:.3f} kW<extra></extra>'))
+fig_toky.add_trace(go.Scatter(x=df_bal['Čas_zobrazeni'], y=df_bal['Odběr z DS']*4, mode='lines', name='Odběr ze sítě', line=dict(color='#38bdf8', width=2, dash='dash'), hovertemplate='%{y:.3f} kW<extra></extra>'))
 
 max_y_toky = max((df_bal['Výroba FVE']*4).max(), (df_bal['Spotřeba']*4).max(), (df_bal['Odběr z DS']*4).max()) * 1.1 + 1
 
@@ -366,20 +403,28 @@ st.plotly_chart(fig_toky, use_container_width=True)
 fig_spotrebice = go.Figure()
 distinct_colors = ['#38bdf8', '#a3e635', '#f87171', '#c084fc', '#fbbf24', '#2dd4bf', '#fb7185', '#818cf8', '#fcd34d', '#34d399', '#f472b6', '#60a5fa']
 
-for idx, app_name in enumerate(active_appliances):
+# Kreslíme pouze ty, které uživatel nevypnul
+for idx, app_name in enumerate(vybrane_spotrebice):
     vykon_kw = pd.to_numeric(df_app_unique[app_name], errors='coerce').fillna(0) * 4
-    fig_spotrebice.add_trace(go.Bar(x=df_bal['Čas_zobrazeni'], y=vykon_kw, name=app_name, marker_color=distinct_colors[idx % len(distinct_colors)], marker_line_color='rgba(255,255,255,0.3)', marker_line_width=1, hovertemplate='<b>%{y:.2f} kW</b><extra></extra>'))
+    fig_spotrebice.add_trace(go.Bar(x=df_bal['Čas_zobrazeni'], y=vykon_kw, name=app_name, marker_color=distinct_colors[idx % len(distinct_colors)], marker_line_color='rgba(255,255,255,0.3)', marker_line_width=1, hovertemplate='<b>%{y:.3f} kW</b><extra></extra>'))
 
-max_y_spotrebice = (df_bal['Spotřeba']*4).max() * 1.1 + 1
+# DYNAMICKÝ ZOOM OSY Y: 
+if vybrane_spotrebice:
+    df_vybrane = df_app_unique[vybrane_spotrebice].apply(pd.to_numeric, errors='coerce').fillna(0)
+    # Najde největší vrchol vybraných spotřebičů
+    max_y_spotrebice = max(df_vybrane.sum(axis=1).max() * 4 * 1.1 + 0.05, 0.2)
+else:
+    max_y_spotrebice = 1.0
 
 fig_spotrebice.update_layout(
     title=dict(text="Energetická stopa spotřebičů (Z čeho se skládá celková spotřeba domu)", font=dict(size=16, color="#e2e8f0")),
-    barmode='stack', xaxis_title="Čas", yaxis_title="Příkon (kW)", hovermode="x unified", height=450,
-    legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1, font=dict(size=14)),
+    barmode='stack', xaxis_title="Čas", yaxis_title="Příkon (kW)", hovermode="x unified", 
+    height=600,
+    legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02, font=dict(size=13)),
     font=dict(color="#f8fafc", size=13), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
     xaxis=dict(gridcolor="rgba(255,255,255,0.05)", type='category'), 
     yaxis=dict(gridcolor="rgba(255,255,255,0.05)", range=[0, max_y_spotrebice]), 
-    margin=dict(t=50)
+    margin=dict(t=50, r=150)
 )
 st.plotly_chart(fig_spotrebice, use_container_width=True)
 
@@ -394,7 +439,7 @@ fig_sit.add_trace(go.Scatter(
     x=df_bal['Čas_zobrazeni'], y=df_bal['Odběr z DS']*4, 
     mode='lines', name='Nákup ze sítě', 
     line=dict(color='#ef4444', width=2), fill='tozeroy', 
-    hovertemplate='<b>Nákup:</b> %{y:.2f} kW<extra></extra>'
+    hovertemplate='<b>Nákup:</b> %{y:.3f} kW<extra></extra>'
 ))
 
 fig_sit.add_trace(go.Scatter(
@@ -402,11 +447,11 @@ fig_sit.add_trace(go.Scatter(
     mode='lines', name='Prodej do sítě (Přetoky)', 
     line=dict(color='#10b981', width=2), fill='tozeroy', 
     customdata=df_bal['Přetok do DS']*4, 
-    hovertemplate='<b>Prodej:</b> %{customdata:.2f} kW<extra></extra>'
+    hovertemplate='<b>Prodej:</b> %{customdata:.3f} kW<extra></extra>'
 ))
 
-max_y_sit = (df_bal['Odběr z DS']*4).max() * 1.1 + 0.5
-min_y_sit = -(df_bal['Přetok do DS']*4).max() * 1.1 - 0.5
+max_y_sit = max((df_bal['Odběr z DS']*4).max() * 1.1 + 0.5, 2.0)
+min_y_sit = min(-(df_bal['Přetok do DS']*4).max() * 1.1 - 0.5, -2.0)
 
 fig_sit.update_layout(
     title=dict(text="Zrcadlová bilance: Kdy síť zatěžujeme a kdy ji naopak krmíme", font=dict(size=16, color="#e2e8f0")),
@@ -423,7 +468,7 @@ st.plotly_chart(fig_sit, use_container_width=True)
 # --- ŽEBŘÍČEK ŽROUTŮ ENERGIE ---
 st.markdown("---")
 st.markdown("### 🥇 Žebříček žroutů (Celková denní spotřeba)")
-sums = {c: pd.to_numeric(df_app_unique[c], errors='coerce').fillna(0).sum() for c in active_appliances}
+sums = {c: pd.to_numeric(df_app_unique[c], errors='coerce').fillna(0).sum() for c in vybrane_spotrebice}
 top_zrouti = [(name, val) for name, val in sorted(sums.items(), key=lambda x: x[1], reverse=True) if val > 0]
 
 if top_zrouti:
